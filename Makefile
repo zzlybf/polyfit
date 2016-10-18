@@ -4,49 +4,54 @@ ifeq ($(SCIDB),)
     X := $(shell dirname ${X})
     SCIDB := $(shell dirname ${X})
   endif
-  $(info SciDB installed at $(SCIDB))
 endif
 
-# A development environment will have SCIDB_VER defined, and SCIDB
-# will not be in the same place... but the 3rd party directory *will*
-# be, so build it using SCIDB_VER .
+# A way to set the 3rdparty prefix path that is convenient
+# for SciDB developers.
 ifeq ($(SCIDB_VER),)
-  SCIDB_3RDPARTY = $(SCIDB)/3rdparty
+  SCIDB_3RDPARTY = $(SCIDB)
 else
-  SCIDB_3RDPARTY = /opt/scidb/$(SCIDB_VER)/3rdparty
+  SCIDB_3RDPARTY = /opt/scidb/$(SCIDB_VER)
 endif
 
-INSTALL_DIR = $(SCIDB)/lib/scidb/plugins
+# A better way to set the 3rdparty prefix path that does
+# not assume an absolute path. You can still use the above
+# method if you prefer.
+ifeq ($(SCIDB_THIRDPARTY_PREFIX),)
+  SCIDB_THIRDPARTY_PREFIX := $(SCIDB_3RDPARTY)
+endif
 
-# Include the OPTIMIZED flags for non-debug use
-OPTIMIZED=-O2 -DNDEBUG
-DEBUG=-g -ggdb3
-CFLAGS = -pedantic -W -Wextra -Wall -Wno-variadic-macros -Wno-strict-aliasing \
-         -Wno-long-long -Wno-unused-parameter -fPIC -D_STDC_FORMAT_MACROS \
-         -Wno-system-headers -isystem  $(OPTIMIZED) -D_STDC_LIMIT_MACROS -std=c99
-CCFLAGS = -pedantic -W -Wextra -Wall -Wno-variadic-macros -Wno-strict-aliasing \
-         -Wno-long-long -Wno-unused-parameter -fPIC $(OPTIMIZED) 
-INC = -I. -DPROJECT_ROOT="\"$(SCIDB)\"" -I"$(SCIDB_3RDPARTY)/boost/include/" \
-      -I"$(SCIDB)/include" -I./extern
+# Debug:
+#CFLAGS=-pedantic -W -Wextra -Wall -Wno-variadic-macros -Wno-strict-aliasing -Wno-long-long -Wno-unused-parameter -fPIC -D_STDC_FORMAT_MACROS -Wno-system-headers -isystem -g -ggdb3  -D_STDC_LIMIT_MACROS
+CFLAGS=-W -Wextra -Wall -Wno-unused-parameter -Wno-variadic-macros -Wno-strict-aliasing -Wno-long-long -Wno-unused -fPIC -D_STDC_FORMAT_MACROS -Wno-system-headers -isystem -O3 -g -DNDEBUG -D_STDC_LIMIT_MACROS
+INC=-I. -DPROJECT_ROOT="\"$(SCIDB)\"" -I"$(SCIDB_THIRDPARTY_PREFIX)/3rdparty/boost/include/" -I"$(SCIDB)/include" -I./extern
+LIBS=-shared -Wl,-soname,libpolyfit.so -L. -L"$(SCIDB_THIRDPARTY_PREFIX)/3rdparty/boost/lib" -L"$(SCIDB)/lib" -Wl,-rpath,$(SCIDB)/lib:$(RPATH) -lm
 
-LIBS = -shared -Wl,-soname,libpolyfit.so -ldl -L. \
-       -L"$(SCIDB)/3rdparty/boost/lib" -L"$(SCIDB)/lib" \
-       -Wl,-rpath,$(SCIDB)/lib:$(RPATH)
+SRCS=plugin.cpp 
+# Compiler settings for SciDB version >= 15.7
+ifneq ("$(wildcard /usr/bin/g++-4.9)","")
+  CC := "/usr/bin/gcc-4.9"a
+  CXX := "/usr/bin/g++-4.9"
+  CFLAGS+=-std=c++11 -DCPP11
+  SRCS+= LogicalPolyfit.cpp PhysicalPolyfit.cpp
+else
+  ifneq ("$(wildcard /opt/rh/devtoolset-3/root/usr/bin/gcc)","")
+   CC := "/opt/rh/devtoolset-3/root/usr/bin/gcc"
+   CXX := "/opt/rh/devtoolset-3/root/usr/bin/g++"
+   CFLAGS+=-std=c++11 -DCPP11
+   SRCS+= LogicalPolyfit.cpp PhysicalPolyfit.cpp
+  endif
+endif
 
-SRCS = LogicalPolyfit.cpp \
-       PhysicalPolyfit.cpp
-
-all: libpolyfit.so
-
-clean:
-	rm -rf *.so *.o
-
-libpolyfit.so: $(SRCS)
+all:
 	@if test ! -d "$(SCIDB)"; then echo  "Error. Try:\n\nmake SCIDB=<PATH TO SCIDB INSTALL PATH>"; exit 1; fi
-	$(CXX) $(CCFLAGS) $(INC) -o LogicalPolyfit.o -c LogicalPolyfit.cpp
-	$(CXX) $(CCFLAGS) $(INC) -o PhysicalPolyfit.o -c PhysicalPolyfit.cpp
-	$(CXX) $(CCFLAGS) $(INC) -o libpolyfit.so plugin.cpp LogicalPolyfit.o PhysicalPolyfit.o $(LIBS)
-	@echo "Now copy libpolyfit.so to $(INSTALL_DIR) on all your SciDB nodes, and restart SciDB."
-
+	$(CXX) $(CFLAGS) $(INC) -o libpolyfit.so $(SRCS) $(LIBS)
+	@echo "Now copy *.so to your SciDB lib/scidb/plugins directory and run"
+	@echo "iquery -aq \"load_library('polyfit')\" # to load the plugin."
+	@echo
+	@echo "Re-start SciDB if the plugin was already loaded previously."
+	@echo "Remember to copy the plugin to all your nodes in the cluster."
 test:
-	echo write me XXX
+	@./test.sh
+clean:
+	rm -f *.so *.o

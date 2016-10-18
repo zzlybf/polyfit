@@ -25,7 +25,23 @@
  *
  * END_COPYRIGHT
  */
-#include "query/Operator.h"
+#include <limits>
+#include <string>
+#include <vector>
+
+#include <system/Exceptions.h>
+#include <query/TypeSystem.h>
+#include <query/Operator.h>
+#include <util/Platform.h>
+#include <util/Network.h>
+#include <boost/scope_exit.hpp>
+
+#include <log4cxx/logger.h>
+
+using std::shared_ptr;
+using std::make_shared;
+
+using namespace std;
 
 namespace scidb
 {
@@ -39,12 +55,6 @@ public:
                 ArrayDesc const& schema):
         PhysicalOperator(logicalName, physicalName, parameters, schema)
     {}
-
-    virtual ArrayDistribution getOutputDistribution(vector<ArrayDistribution> const& inputDistributions,
-                                                    vector<ArrayDesc> const& inputSchemas) const
-    {
-       return inputDistributions[0];
-    }
 
     /**
       * [Optimizer API] Determine if operator changes result chunk distribution.
@@ -73,7 +83,7 @@ public:
         int n = ((boost::shared_ptr<OperatorParamPhysicalExpression>&)_parameters[0])->getExpression()->evaluate().getInt32();
         while (!saiter1->end() && !saiter2->end())
         {
-            Coordinates const& chunkPos = saiters1->getPosition();
+            Coordinates const& chunkPos = saiter1->getPosition();
             sciter1 = saiter1->getChunk().getConstIterator(0);
             sciter2 = saiter2->getChunk().getConstIterator(0);
             dciter = daiter->newChunk(chunkPos).getIterator(query, ChunkIterator::SEQUENTIAL_WRITE);
@@ -85,7 +95,7 @@ public:
                 Value const& val2 = sciter2->getItem();
                 Value val;
                 double dval = val1.getDouble() + val2.getDouble();
-                val.setData(dval, sizeof(double));
+                val.setData(&dval, sizeof(double));
 
                 dciter->setPosition(inputCellPos);
                 dciter->writeItem(val);
@@ -105,5 +115,5 @@ public:
         return da;
     }
 };
-REGISTER_PHYSICAL_OPERATOR_FACTORY(Physicalknn, "polyfit", "PhysicalPolyfit");
+REGISTER_PHYSICAL_OPERATOR_FACTORY(PhysicalPolyfit, "polyfit", "PhysicalPolyfit");
 } //namespace scidb
