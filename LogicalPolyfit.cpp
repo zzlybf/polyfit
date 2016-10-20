@@ -60,23 +60,33 @@ public:
  */
     ArrayDesc inferSchema(vector< ArrayDesc> schemas, shared_ptr< Query> query)
     {
-        ArrayDesc const& matrix1 = schemas[0];
-        if(matrix1.getAttributes(true)[0].getType() != TID_DOUBLE)
+        ArrayDesc const& array1 = schemas[0];
+        if(array1.getAttributes(true)[0].getType() != TID_DOUBLE)
            throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) <<  "polyfit first argument requires a single double precision-valued attribute";
-        if(matrix1.getDimensions().size() != 1 )
+        if(array1.getDimensions().size() != 1 )
            throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) <<  "polyfit first argument requires an array input";
-        if (matrix1.getDimensions()[0].getChunkInterval() != static_cast<int64_t>(matrix1.getDimensions()[0].getLength()))
+        if (array1.getDimensions()[0].getChunkInterval() != static_cast<int64_t>(array1.getDimensions()[0].getLength()))
             throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) << "polyfit first argument does not accept column partitioning of the input array, use repart first";        
-        ArrayDesc const& matrix2 = schemas[1];
-        if(matrix2.getAttributes(true)[0].getType() != TID_DOUBLE)
+        ArrayDesc const& array2 = schemas[1];
+        if(array2.getAttributes(true)[0].getType() != TID_DOUBLE)
            throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) <<  "polyfit second argument requires a single double precision-valued attribute";
-        if(matrix2.getDimensions().size() != 1 )
+        if(array2.getDimensions().size() != 1 )
            throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) <<  "polyfit second argument requires an array input";
-        if (matrix2.getDimensions()[0].getChunkInterval() != static_cast<int64_t>(matrix2.getDimensions()[0].getLength()))
+        if (array2.getDimensions()[0].getChunkInterval() != static_cast<int64_t>(array2.getDimensions()[0].getLength()))
             throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) << "polyfit second argument does not accept column partitioning of the input array, use repart first";
-                
-        return ArrayDesc("polyfit_array", matrix1.getAttributes(), matrix1.getDimensions(), matrix1.getDistribution(),
-                query->getDefaultArrayResidency());
+        if(array1.getDimensions()[0].getLength() != array2.getDimensions()[0].getLength())
+            throw SYSTEM_EXCEPTION(SCIDB_SE_INTERNAL, SCIDB_LE_ILLEGAL_OPERATION) << "polyfit input arrays should have same dimension length";
+        
+        int n = evaluate(((std::shared_ptr<OperatorParamLogicalExpression>&) _parameters[0])->getExpression(), query, TID_UINT64).getUint64();
+        //int n = ((boost::shared_ptr<OperatorParamPhysicalExpression>&)_parameters[0])->getExpression()->evaluate().getInt32();
+        
+        vector<DimensionDesc> dimensions(1);
+	//dimensions[0] = DimensionDesc("i", 0, 0, n1, n1, n+1, 0);
+	dimensions[0] = DimensionDesc("i", 0, 0, n, n, (n+1), 0);
+	vector<AttributeDesc> attributes;
+	attributes.push_back(AttributeDesc((AttributeID)0, "count", TID_DOUBLE, AttributeDesc::IS_NULLABLE, 0));
+
+        return ArrayDesc("polyfitresult", attributes, dimensions, defaultPartitioning(), query->getDefaultArrayResidency());
     }
 };
 
